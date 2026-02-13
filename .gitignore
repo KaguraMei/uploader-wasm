@@ -1,0 +1,10 @@
+/target
+/shelf/
+/workspace.xml
+/queries/
+# Datasource local storage ignored files
+/dataSources/
+/dataSources.local.xml
+/httpRequests/
+.vscode/
+.idea/
