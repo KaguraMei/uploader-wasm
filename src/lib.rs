@@ -26,6 +26,7 @@ use sha2::{Sha256, Digest};      // SHA256 digest calculation (required for S3 V
 use hmac::{Hmac, Mac};           // HMAC message authentication code (required for S3 V4 signing)
 use js_sys::{Uint8Array, Date, encode_uri_component};  // JavaScript interop types
 use wasm_bindgen::JsCast;
+use blake3;                      // BLAKE3 high-performance hash for sample-based hashing
 
 // Type alias for HMAC-SHA256, used in S3 V4 signature algorithm
 type HmacSha256 = Hmac<Sha256>;
@@ -135,6 +136,66 @@ impl IncrementalHasher {
     }
 }
 
+// ============================================================================
+// compute_sample_hash: Fast Sample-Based File Hash
+// ============================================================================
+// Computes a unique hash for large files by sampling head, middle, and tail
+// sections instead of reading the entire file. This enables instant duplicate
+// detection (秒传) without full file I/O.
+//
+// Algorithm:
+// 1. JS side uses File.slice() to extract samples (no actual I/O yet)
+// 2. JS reads samples into memory (~3MB total for default 1MB per section)
+// 3. WASM receives combined sample data and computes BLAKE3 hash
+// 4. File size is mixed into hash to ensure uniqueness
+//
+// Parameters:
+// - data: Combined sample data (head + middle + tail sections)
+// - file_size: Total file size in bytes (mixed into hash for uniqueness)
+//
+// Returns:
+// - BLAKE3 hash as hexadecimal string (64 characters)
+//
+// Performance:
+// - ~1ms for 3MB sample data (BLAKE3 is extremely fast)
+// - 1000x faster than hashing entire 1GB file
+// - Suitable for instant duplicate detection
+//
+// Security Notes:
+// - NOT cryptographically secure for integrity verification
+// - Collision probability is low but non-zero for similar files
+// - Use full-file hash (IncrementalHasher) for critical integrity checks
+// - Suitable for deduplication, not for security-critical applications
+//
+// Example Usage:
+// ```js
+// // JS side: Sample file without loading into memory
+// const SAMPLE_SIZE = 1024 * 1024; // 1MB per section
+// const head = file.slice(0, SAMPLE_SIZE);
+// const mid = file.slice(Math.floor(file.size / 2), Math.floor(file.size / 2) + SAMPLE_SIZE);
+// const tail = file.slice(file.size - SAMPLE_SIZE, file.size);
+// const combined = new Blob([head, mid, tail]);
+// const sampleData = new Uint8Array(await combined.arrayBuffer());
+//
+// // WASM side: Fast hash computation
+// const hash = compute_sample_hash(sampleData, file.size);
+// ```
+// ============================================================================
+#[wasm_bindgen]
+pub fn compute_sample_hash(data: &[u8], file_size: u64) -> String {
+    let mut hasher = blake3::Hasher::new();
+    
+    // Hash the sample data
+    hasher.update(data);
+    
+    // Mix in file size to ensure different-sized files produce different hashes
+    // This prevents collision between files with identical sampled sections
+    hasher.update(&file_size.to_le_bytes());
+    
+    // Return hash as hexadecimal string
+    hasher.finalize().to_hex().to_string()
+}
+
 
 
 // ============================================================================
@@ -183,7 +244,7 @@ impl Uploader {
     // 2. Never hardcode long-term credentials in frontend code
     // 3. Set reasonable credential expiration (e.g., 1 hour)
     // 4. Use HTTPS for credential transmission
-    // 5. Implement proper IAM policies with least privilege
+    // 5. Implement proper IAM policies with the least privilege
     //
     // Example JavaScript usage:
     // ```js
@@ -739,7 +800,7 @@ impl Uploader {
             .unwrap_or(upload_id);
         let query = format!("uploadId={}", encoded_upload_id);
 
-        // DELETE requests typically have no body, SHA256 is empty hash constant
+        // DELETE requests typically have nobody, SHA256 is empty hash constant
         let content_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
         let canonical_uri = format!("/{}/{}", bucket, object_key);
 

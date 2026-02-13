@@ -16,3 +16,4 @@ sha2 = "0.10" # S3 V4 签名使用 SHA256
 hmac = "0.12"
 hex = "0.4"
 console_error_panic_hook = "0.1.7"
+blake3 = "1.5"
