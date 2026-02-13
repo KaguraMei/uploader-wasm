@@ -413,8 +413,8 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## 📞 Support
 
 - 📖 [Documentation](./ABORT_SIGNAL_USAGE.md)
-- 💬 [Issues](https://github.com/your-repo/issues)
-- 📧 Email: support@example.com
+- 💬 [Issues](https://github.com/KaguraMei/uploader-wasm/issues)
+- 📧 Email: kaguraayaoffical@gmail.com
 
 ## 🗺️ Roadmap
 
